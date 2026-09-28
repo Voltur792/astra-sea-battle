@@ -76,7 +76,12 @@ class SeaBattle(Plugin):
 
     @ui_call("sea_battle_ui_state")
     async def ui_state(self, **params):
-        return self._ui_snapshot(params.get("game_code", ""))
+        return self._ui_response(self._ui_snapshot(params.get("game_code", "")))
+
+    @staticmethod
+    def _ui_response(value):
+        """Encode a UI result using Astra SDK's PluginUiCallResponse contract."""
+        return {"result_json": json.dumps(value, ensure_ascii=False), "error": ""}
 
     def _ui_snapshot(self, code=""):
         snapshot = game.ui_state(code)
@@ -145,16 +150,16 @@ class SeaBattle(Plugin):
     async def ui_start(self, **params):
         mode = params.get("mode", "plugin")
         if mode == "ai":
-            return self._queue_ui_action(
-                "start", "", "Астра выбирает флот…", self._start_ai_from_ui
+            return self._ui_response(
+                self._queue_ui_action("start", "", "Астра выбирает флот…", self._start_ai_from_ui)
             )
         else:
             result = game.start(mode="plugin")
             message = "Партия началась. Флот расставлен автоматически без вызова модели."
         if "Код партии: " not in result:
-            return {"error": result, "message": result, "state": self._ui_snapshot()}
+            return self._ui_response({"error": result, "message": result, "state": self._ui_snapshot()})
         code = result.split("Код партии: ", 1)[1].split(".", 1)[0]
-        return {"message": message, "state": self._ui_snapshot(code)}
+        return self._ui_response({"message": message, "state": self._ui_snapshot(code)})
 
     @ui_call("sea_battle_ui_fire")
     async def ui_fire(self, **params):
@@ -162,32 +167,32 @@ class SeaBattle(Plugin):
         coordinate = params.get("coordinate", "")
         if game.get_mode(code) == "ai":
             if self._ui_task and not self._ui_task.done():
-                return {"message": "Дождись завершения запроса к Астре.", "error": True, "state": self._ui_snapshot(code)}
+                return self._ui_response({"message": "Дождись завершения запроса к Астре.", "error": True, "state": self._ui_snapshot(code)})
             result = game.fire_ai_player(code, coordinate)
             if "error" in result:
-                return {"message": result["error"], "error": True, "state": self._ui_snapshot(code)}
+                return self._ui_response({"message": result["error"], "error": True, "state": self._ui_snapshot(code)})
             if result.get("needs_bot"):
                 queued = self._queue_ui_action(
                     "shot", code, "Астра выбирает выстрел…", lambda: self._run_ai_turn(code)
                 )
-                return {**queued, "message": result["message"], "state": self._ui_snapshot(code)}
-            return {"message": result["message"], "error": False, "state": self._ui_snapshot(code)}
+                return self._ui_response({**queued, "message": result["message"], "state": self._ui_snapshot(code)})
+            return self._ui_response({"message": result["message"], "error": False, "state": self._ui_snapshot(code)})
         result = game.fire(code, coordinate)
         message = result.split("\nПотоплено:", 1)[0]
         message = message.split("\n\nПоле Астры", 1)[0].split("\n\nПартия", 1)[0]
-        return {"message": message, "state": self._ui_snapshot(code)}
+        return self._ui_response({"message": message, "state": self._ui_snapshot(code)})
 
     @ui_call("sea_battle_ui_surrender")
     async def ui_surrender(self, **params):
         code = params.get("game_code", "")
         result = game.surrender(code)
-        return {"message": result.split("\n\n", 1)[0], "state": self._ui_snapshot(code)}
+        return self._ui_response({"message": result.split("\n\n", 1)[0], "state": self._ui_snapshot(code)})
 
     @ui_call("sea_battle_ui_retry_ai")
     async def ui_retry_ai(self, **params):
         code = params.get("game_code", "")
-        return self._queue_ui_action(
-            "shot", code, "Астра выбирает выстрел…", lambda: self._run_ai_turn(code)
+        return self._ui_response(
+            self._queue_ui_action("shot", code, "Астра выбирает выстрел…", lambda: self._run_ai_turn(code))
         )
 
     async def _ask_json(self, payload: dict) -> dict:
@@ -235,6 +240,7 @@ class SeaBattle(Plugin):
         except (TypeError, ValueError):
             decoder = json.JSONDecoder()
             value = None
+            candidates = []
             for index, char in enumerate(raw):
                 if char != "{":
                     continue
@@ -243,8 +249,19 @@ class SeaBattle(Plugin):
                 except ValueError:
                     continue
                 if isinstance(candidate, dict):
+                    candidates.append(candidate)
+            for candidate in candidates:
+                if any(key in candidate for key in ("fleet", "coordinate", "shot")):
                     value = candidate
-                    break
+                    continue
+                if value is None and any(
+                    isinstance(candidate.get(key), dict)
+                    and any(field in candidate[key] for field in ("fleet", "coordinate", "shot"))
+                    for key in ("format", "result", "output")
+                ):
+                    value = candidate
+            if value is None and candidates:
+                value = candidates[-1]
             if value is None:
                 raise RuntimeError("Astra не вернула JSON с ходом или расстановкой.")
         if not isinstance(value, dict):
@@ -285,7 +302,8 @@ class SeaBattle(Plugin):
                 reason = "JSON должен содержать ключ fleet со списком из 10 координатных отрезков."
             if attempt == 0:
                 correction = f"\nПредыдущий ответ не принят: {reason} Исправь его и верни новый JSON с ключом fleet."
-        raise RuntimeError("Модель Astra не смогла предложить допустимую расстановку. Попробуй ещё раз.")
+        logger.warning("Astra returned an invalid fleet after retries: %s", reason)
+        raise RuntimeError(f"Модель Astra не смогла предложить допустимую расстановку: {reason}")
 
     async def _run_ai_turn(self, code: str) -> dict:
         """Ask Astra for shots until it misses, validating every coordinate."""

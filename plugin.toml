@@ -1,7 +1,7 @@
 [plugin]
 id = "sea-battle"
 name = "Sea Battle"
-version = "0.3.0"
+version = "0.3.1"
 description = "Play Battleship in Astra with an interactive map, quick local mode, or an optional AI opponent."
 author = "Voltur"
 license = "MIT"
