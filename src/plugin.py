@@ -194,11 +194,16 @@ class SeaBattle(Plugin):
         """Ask Astra's configured model for one compact JSON game decision."""
         if self.host is None:
             raise RuntimeError("Нет соединения с моделью Astra.")
+        request = (
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            if isinstance(payload, dict)
+            else str(payload)
+        )
         prompt = (
             "You are the decision engine for a Battleship game. Execute the task now. "
             "Reply with exactly one valid JSON object matching the requested output; "
-            "do not explain, reformat the request, add prose, or use Markdown fences.\n"
-            + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            "do not echo the request, explain, add prose, or use Markdown fences.\n"
+            + request
         )
         parts = []
         try:
@@ -247,15 +252,28 @@ class SeaBattle(Plugin):
         return value
 
     async def _choose_fleet(self) -> str:
-        payload = {
-            "task": "place_battleship_fleet",
-            "rules": "Выбери флот из 10 кораблей: длины 4,3,3,2,2,2,1,1,1,1. Все корабли прямые, горизонтальные или вертикальные, не пересекаются и не соприкасаются даже углами. Координаты по столбцам А,Б,В,Г,Д,Е,Ж,З,И,К и строкам 1-10.",
-            "format": {"fleet": ["А1-Г1", "Е1-З1", "К1-К3", "А3-А4", "В3-Г3", "Е4-Ж4", "Б6", "Г6", "Е7", "З8"]},
-            "output": "Верни только JSON с ключом fleet и массивом из 10 строк-отрезков.",
-        }
+        rules = (
+            "Расставь флот для игры в морской бой на поле 10x10. Нужны 10 прямых кораблей: "
+            "длины 4, 3, 3, 2, 2, 2, 1, 1, 1, 1. Корабли не должны пересекаться "
+            "или соприкасаться, даже по диагонали. Столбцы: А, Б, В, Г, Д, Е, Ж, З, И, К; "
+            "строки: 1-10. Верни только JSON-объект с верхнеуровневым ключом fleet, "
+            "его значением должен быть массив из 10 строк координатных отрезков "
+            "(например, А1-Г1 для корабля длиной 4 или Б7 для корабля длиной 1). "
+            "Сам придумай координаты. Не копируй запрос и не пересказывай правила."
+        )
+        correction = ""
         for attempt in range(2):
-            answer = await self._ask_json(payload)
+            answer = await self._ask_json(rules + correction)
             fleet = answer.get("fleet")
+            if not isinstance(fleet, list):
+                # Some chat models echo the old request wrapper instead of
+                # returning the requested result object. Accept its nested
+                # fleet only after the same strict board validation.
+                for wrapper_key in ("format", "result", "output"):
+                    wrapper = answer.get(wrapper_key)
+                    if isinstance(wrapper, dict) and isinstance(wrapper.get("fleet"), list):
+                        fleet = wrapper["fleet"]
+                        break
             if isinstance(fleet, list) and all(isinstance(ship, str) for ship in fleet):
                 encoded = ";".join(fleet)
                 try:
@@ -266,7 +284,7 @@ class SeaBattle(Plugin):
             else:
                 reason = "JSON должен содержать ключ fleet со списком из 10 координатных отрезков."
             if attempt == 0:
-                payload["correction"] = reason
+                correction = f"\nПредыдущий ответ не принят: {reason} Исправь его и верни новый JSON с ключом fleet."
         raise RuntimeError("Модель Astra не смогла предложить допустимую расстановку. Попробуй ещё раз.")
 
     async def _run_ai_turn(self, code: str) -> dict:
@@ -278,14 +296,15 @@ class SeaBattle(Plugin):
                 observation = game.ai_observation(code)
                 if observation is None:
                     break
-                payload = {
-                    "task": "choose_battleship_shot",
-                    "rules": "Морской бой 10x10, столбцы АБВГДЕЖЗИК, строки 1-10. Выбери клетку, которой нет в shots; при попадании продолжай добивать корабль. Верни только JSON.",
-                    "observations": observation["shots"],
-                    "output": {"coordinate": "Б7"},
-                }
+                prompt = (
+                    "Морской бой, поле 10x10: столбцы АБВГДЕЖЗИК, строки 1-10. "
+                    "Выбери одну клетку, которой нет в истории ниже. После попадания "
+                    "старайся добить этот корабль. Верни только JSON вида "
+                    '{"coordinate":"Б7"}. История выстрелов и исходов: '
+                    + json.dumps(observation["shots"], ensure_ascii=False, separators=(",", ":"))
+                )
                 for attempt in range(2):
-                    answer = await self._ask_json(payload)
+                    answer = await self._ask_json(prompt)
                     coordinate = answer.get("coordinate")
                     if not isinstance(coordinate, str):
                         coordinate = answer.get("shot")
@@ -296,7 +315,7 @@ class SeaBattle(Plugin):
                             return {"message": " ".join(messages), "error": False}
                         break
                     if attempt == 0:
-                        payload["correction"] = result["error"]
+                        prompt += f"\nЭтот ход недопустим: {result['error']} Верни другую клетку в JSON."
                     else:
                         return {"message": " ".join(messages) or "Астра пока не смогла сделать выстрел.", "error": True}
             return {"message": " ".join(messages) or "Ответный ход Астры завершён.", "error": False}
