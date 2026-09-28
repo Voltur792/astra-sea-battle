@@ -15,7 +15,7 @@ FLEET = (4, 3, 3, 2, 2, 2, 1, 1, 1, 1)
 LETTERS = "АБВГДЕЖЗИК"
 LATIN = "ABCDEFGHIJ"
 _LOCK = threading.RLock()
-MAX_SAVED_GAMES = 50
+MAX_SAVED_GAMES = 5
 
 
 def _state_path() -> Path:

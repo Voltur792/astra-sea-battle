@@ -102,11 +102,11 @@
     <header class="topbar">
       <div class="heading">
         <h1>Морской бой</h1>
-        <div class="subhead">Ходы с карты идут прямо в плагин; ИИ-режим просит модель Astra ответить JSON</div>
+        <div class="subhead">Стреляйте по карте и следите за ходом игры</div>
         <fieldset class="mode-picker" aria-label="Режим новой партии">
           <legend class="hidden">Режим новой партии</legend>
-          <label class="mode-choice"><input type="radio" name="gameMode" value="plugin" checked> Быстрый плагин · без токенов</label>
-          <label class="mode-choice"><input type="radio" name="gameMode" value="ai"> Против ИИ Astra · JSON</label>
+          <label class="mode-choice"><input type="radio" name="gameMode" value="plugin" checked> Быстрая игра · без расхода ИИ</label>
+          <label class="mode-choice"><input type="radio" name="gameMode" value="ai"> Против ИИ Astra</label>
         </fieldset>
       </div>
       <div class="actions">
@@ -212,7 +212,7 @@
       for (const item of games) {
         const option = document.createElement('option');
         option.value = item.code;
-        option.textContent = `${item.code} · ${item.mode === 'ai' ? 'ИИ Astra' : 'плагин'} · ${item.over ? `завершена: ${item.winner}` : 'идёт'}`;
+        option.textContent = `${item.code} · ${item.mode === 'ai' ? 'Astra' : 'быстрая игра'} · ${item.over ? `завершена: ${item.winner}` : 'идёт'}`;
         option.selected = item.code === selectedCode;
         el.gameSelect.append(option);
       }
@@ -232,9 +232,9 @@
       }
       if (!chosen) return;
       el.turnTitle.textContent = chosen.over ? `Партия ${chosen.code} завершена · победитель: ${chosen.winner}` : `Партия ${chosen.code} · ${chosen.bot_pending ? (chosen.bot_busy ? 'Астра выбирает выстрел…' : 'ответный ход ждёт повтора') : busy ? 'обработка…' : 'твой ход'}`;
-      const placementNote = chosen.bot_placement === 'model' ? 'Расстановку флота выбрала Астра' : 'Быстрый старт: случайная расстановка';
-      const opponentNote = chosen.mode === 'ai' ? 'ИИ Astra · ходы выбирает модель, JSON-обмен расходует токены' : 'Плагин · ходы по алгоритму, без вызова модели';
-      el.turnNote.textContent = chosen.over ? `Итоговые карты раскрыты · ${opponentNote} · ${placementNote}` : `Попадание даёт ещё один выстрел; Астра ищет продолжение рядом с попаданием · после промаха ходит Астра · ${opponentNote} · ${placementNote}`;
+      const placementNote = chosen.bot_placement === 'model' ? 'Флот подготовила Астра' : 'Случайная расстановка';
+      const opponentNote = chosen.mode === 'ai' ? 'Соперник — Astra' : 'Быстрый соперник';
+      el.turnNote.textContent = chosen.over ? `Итоговые карты раскрыты · ${opponentNote} · ${placementNote}` : `Попадание — стреляй ещё; после промаха ходит Astra · ${opponentNote} · ${placementNote}`;
       el.stats.innerHTML = `<span>Корабли Астры: <strong>${chosen.bot_sunk}/10</strong></span><span>Твои корабли: <strong>${chosen.player_sunk}/10</strong></span><span>Выстрелы: <strong>${chosen.player_shots + chosen.bot_shots}</strong></span>`;
       renderMap(el.targetMap, chosen.target_map, true);
       renderMap(el.ownMap, chosen.own_map, false);
