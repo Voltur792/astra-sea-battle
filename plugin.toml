@@ -18,7 +18,7 @@ tools = true
 ui_contributions = true
 
 [permissions]
-send_chat_message = { reason = "Lets Astra choose its fleet and play as your opponent." }
+send_chat_message = { reason = "Allows Astra to let the selected AI model choose its fleet and play as the opponent." }
 
 [config]
 schema = "{ \"type\": \"object\", \"properties\": {} }"
