@@ -298,6 +298,13 @@ class SeaBattle(Plugin):
                     return encoded
                 except ValueError as exc:
                     reason = str(exc)
+                    if "соприкасаться" in reason:
+                        try:
+                            repaired = game.repair_bot_fleet(encoded)
+                            logger.info("Adjusted Astra fleet to remove touching ships")
+                            return repaired
+                        except ValueError as repair_exc:
+                            reason = str(repair_exc)
             else:
                 reason = "JSON должен содержать ключ fleet со списком из 10 координатных отрезков."
             if attempt == 0:

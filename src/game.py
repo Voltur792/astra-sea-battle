@@ -136,6 +136,88 @@ def parse_bot_fleet(value: str) -> list[list[str]]:
     return ships
 
 
+def repair_bot_fleet(value: str) -> str:
+    """Keep Astra's valid ship placements and move only conflicting ships."""
+    raw_ships = [part.strip() for part in value.split(";") if part.strip()]
+    if len(raw_ships) != len(FLEET):
+        raise ValueError("Нужно указать 10 кораблей.")
+
+    proposals: list[list[tuple[int, int]]] = []
+    for raw in raw_ships:
+        ends = [point.strip() for point in raw.split("-")]
+        if len(ends) not in (1, 2):
+            raise ValueError(f"Не понял координаты корабля «{raw}».")
+        start = parse_cell(ends[0])
+        finish = parse_cell(ends[-1])
+        if start[0] != finish[0] and start[1] != finish[1]:
+            raise ValueError(f"Корабль «{raw}» должен стоять прямо.")
+        dr = (finish[0] > start[0]) - (finish[0] < start[0])
+        dc = (finish[1] > start[1]) - (finish[1] < start[1])
+        length = max(abs(finish[0] - start[0]), abs(finish[1] - start[1])) + 1
+        proposals.append([(start[0] + dr * i, start[1] + dc * i) for i in range(length)])
+
+    if sorted(map(len, proposals)) != sorted(FLEET):
+        raise ValueError("Длины кораблей должны быть 4, 3, 3, 2, 2, 2, 1, 1, 1 и 1 клеток.")
+
+    blocked: set[tuple[int, int]] = set()
+    placed: list[list[tuple[int, int]]] = []
+    remaining = list(proposals)
+    # Retain longer valid model placements first; relocate just the ships that
+    # overlap or touch a previously retained ship.
+    for cells in sorted(proposals, key=len, reverse=True):
+        if all(cell not in blocked for cell in cells):
+            placed.append(cells)
+            for cell in cells:
+                blocked.update(_neighbors(cell))
+            remaining.remove(cells)
+
+    needed = sorted((len(cells) for cells in remaining), reverse=True)
+
+    def fill(index: int) -> bool:
+        if index == len(needed):
+            return True
+        length = needed[index]
+        preferred = [cells for cells in remaining if len(cells) == length]
+        all_options = [
+            [(row + dr * offset, col + dc * offset) for offset in range(length)]
+            for row in range(SIZE)
+            for col in range(SIZE)
+            for dr, dc in ((0, 1), (1, 0))
+            if row + dr * (length - 1) < SIZE and col + dc * (length - 1) < SIZE
+        ]
+        options = preferred + [cells for cells in all_options if cells not in preferred]
+        for cells in options:
+            if any(cell in blocked for cell in cells):
+                continue
+            previous_blocked = blocked.copy()
+            added = set()
+            for cell in cells:
+                added.update(_neighbors(cell))
+            placed.append(cells)
+            blocked.update(added)
+            if fill(index + 1):
+                return True
+            placed.pop()
+            blocked.clear()
+            blocked.update(previous_blocked)
+        return False
+
+    if not fill(0):
+        # A pathological but structurally valid proposal can pin ships into a
+        # dead end. Keep the game playable with a fully legal local layout.
+        placed = make_fleet(random.Random(secrets.randbits(64)))
+
+    def encode(cells: list[tuple[int, int]] | list[str]) -> str:
+        if cells and isinstance(cells[0], str):
+            cells = [_unkey(cell) for cell in cells]
+        first, last = cells[0], cells[-1]
+        return _label(first) if len(cells) == 1 else f"{_label(first)}-{_label(last)}"
+
+    repaired = ";".join(encode(cells) for cells in placed)
+    parse_bot_fleet(repaired)
+    return repaired
+
+
 def _ship_at(ships: list[list[str]], shot: str) -> list[str] | None:
     return next((ship for ship in ships if shot in ship), None)
 
@@ -308,7 +390,7 @@ def start(bot_fleet: str = "", mode: str = "plugin") -> str:
         }
         games[code] = game
         _save(games)
-        placement = "Астра сама выбрала и проверила расстановку своего флота." if bot_ships else "Флот Астры расставлен автоматически."
+        placement = "Флот предложила Астра, правила расстановки проверил плагин." if bot_ships else "Флот Астры расставлен автоматически."
         opponent = "Астра будет выбирать ответные выстрелы." if mode == "ai" else "Ответные выстрелы рассчитывает плагин."
         return (f"Морской бой начался. Код партии: {code}. {placement} {opponent}\n"
                 "Ты ходишь первым: назови клетку, например Б7 (можно B7 или 7Б).\n\n"
