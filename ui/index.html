@@ -234,7 +234,7 @@
       el.turnTitle.textContent = chosen.over ? `Партия ${chosen.code} завершена · победитель: ${chosen.winner}` : `Партия ${chosen.code} · ${chosen.bot_pending ? (chosen.bot_busy ? 'Астра выбирает выстрел…' : 'ответный ход ждёт повтора') : busy ? 'обработка…' : 'твой ход'}`;
       const placementNote = chosen.bot_placement === 'model' ? 'Расстановку флота выбрала Астра' : 'Быстрый старт: случайная расстановка';
       const opponentNote = chosen.mode === 'ai' ? 'ИИ Astra · ходы выбирает модель, JSON-обмен расходует токены' : 'Плагин · ходы по алгоритму, без вызова модели';
-      el.turnNote.textContent = chosen.over ? `Итоговые карты раскрыты · ${opponentNote} · ${placementNote}` : `Попадание даёт ещё один выстрел; после промаха ходит Астра · ${opponentNote} · ${placementNote}`;
+      el.turnNote.textContent = chosen.over ? `Итоговые карты раскрыты · ${opponentNote} · ${placementNote}` : `Попадание даёт ещё один выстрел; Астра ищет продолжение рядом с попаданием · после промаха ходит Астра · ${opponentNote} · ${placementNote}`;
       el.stats.innerHTML = `<span>Корабли Астры: <strong>${chosen.bot_sunk}/10</strong></span><span>Твои корабли: <strong>${chosen.player_sunk}/10</strong></span><span>Выстрелы: <strong>${chosen.player_shots + chosen.bot_shots}</strong></span>`;
       renderMap(el.targetMap, chosen.target_map, true);
       renderMap(el.ownMap, chosen.own_map, false);

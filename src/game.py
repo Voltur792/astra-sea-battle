@@ -15,6 +15,7 @@ FLEET = (4, 3, 3, 2, 2, 2, 1, 1, 1, 1)
 LETTERS = "АБВГДЕЖЗИК"
 LATIN = "ABCDEFGHIJ"
 _LOCK = threading.RLock()
+MAX_SAVED_GAMES = 50
 
 
 def _state_path() -> Path:
@@ -28,7 +29,22 @@ def _load() -> dict:
     path = _state_path()
     if not path.exists():
         return {}
-    return json.loads(path.read_text(encoding="utf-8"))
+    games = json.loads(path.read_text(encoding="utf-8"))
+    if _prune_games(games):
+        _save(games)
+    return games
+
+
+def _prune_games(games: dict) -> bool:
+    """Bound local history, preferring to remove completed games first."""
+    changed = False
+    while len(games) > MAX_SAVED_GAMES:
+        oldest_completed = next(
+            (code for code, saved in games.items() if saved.get("over")), None
+        )
+        del games[oldest_completed if oldest_completed is not None else next(iter(games))]
+        changed = True
+    return changed
 
 
 def _save(games: dict) -> None:
@@ -389,6 +405,7 @@ def start(bot_fleet: str = "", mode: str = "plugin") -> str:
             "winner": "",
         }
         games[code] = game
+        _prune_games(games)
         _save(games)
         placement = "Флот предложила Астра, правила расстановки проверил плагин." if bot_ships else "Флот Астры расставлен автоматически."
         opponent = "Астра будет выбирать ответные выстрелы." if mode == "ai" else "Ответные выстрелы рассчитывает плагин."
@@ -456,10 +473,33 @@ def ai_observation(code: str) -> dict | None:
         for key in shots:
             result = "sunk" if key in sunk_set else "hit" if key in hit_set else "miss"
             observations.append([_label(_unkey(key)), result])
+        target_candidates = _ai_target_candidates(saved)
         return {
             "game_code": code,
             "shots": observations,
+            "target_candidates": [_label(cell) for cell in target_candidates],
         }
+
+
+def _ai_target_candidates(saved: dict) -> list[tuple[int, int]]:
+    """Return unshot orthogonal neighbors of unsunk hits, constrained by line."""
+    sunk = {cell for ship in saved.get("bot_sunk", []) for cell in ship}
+    unresolved = set(saved.get("bot_hits", [])) - sunk
+    if not unresolved:
+        return []
+    shots = set(saved.get("bot_shots", []))
+    hit_cells = {_unkey(key) for key in unresolved}
+    candidates: set[tuple[int, int]] = set()
+    for row, col in hit_cells:
+        horizontal = (row, col - 1) in hit_cells or (row, col + 1) in hit_cells
+        vertical = (row - 1, col) in hit_cells or (row + 1, col) in hit_cells
+        for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            if horizontal and dr != 0 or vertical and dc != 0:
+                continue
+            cell = (row + dr, col + dc)
+            if 0 <= cell[0] < SIZE and 0 <= cell[1] < SIZE and _key(cell) not in shots:
+                candidates.add(cell)
+    return sorted(candidates)
 
 
 def fire_ai_bot(code: str, coordinate: str) -> dict:
@@ -477,6 +517,13 @@ def fire_ai_bot(code: str, coordinate: str) -> dict:
         key = _key(cell)
         if key in saved["bot_shots"]:
             return {"error": f"По {_label(cell)} Астра уже стреляла.", "continues": False}
+        candidates = _ai_target_candidates(saved)
+        if candidates and cell not in candidates:
+            return {
+                "error": "Сначала добей найденный корабль. Подходящие клетки: "
+                + ", ".join(_label(candidate) for candidate in candidates),
+                "continues": True,
+            }
         saved.setdefault("bot_hits", [])
         saved.setdefault("bot_sunk", [])
         saved["bot_shots"].append(key)

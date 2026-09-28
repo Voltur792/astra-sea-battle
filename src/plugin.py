@@ -324,9 +324,12 @@ class SeaBattle(Plugin):
                 prompt = (
                     "Морской бой, поле 10x10: столбцы АБВГДЕЖЗИК, строки 1-10. "
                     "Выбери одну клетку, которой нет в истории ниже. После попадания "
-                    "старайся добить этот корабль. Верни только JSON вида "
-                    '{"coordinate":"Б7"}. История выстрелов и исходов: '
+                    "обязательно продолжай охоту по соседним клеткам незатопленного корабля. "
+                    "Если target_candidates не пуст, выбирай ТОЛЬКО из этого списка. "
+                    'Верни только JSON вида {"coordinate":"Б7"}. Состояние: '
                     + json.dumps(observation["shots"], ensure_ascii=False, separators=(",", ":"))
+                    + "; обязательные клетки для выстрела: "
+                    + json.dumps(observation["target_candidates"], ensure_ascii=False, separators=(",", ":"))
                 )
                 for attempt in range(2):
                     answer = await self._ask_json(prompt)
@@ -342,6 +345,16 @@ class SeaBattle(Plugin):
                     if attempt == 0:
                         prompt += f"\nЭтот ход недопустим: {result['error']} Верни другую клетку в JSON."
                     else:
+                        candidates = observation.get("target_candidates") or []
+                        if candidates:
+                            # Keep the target logic reliable even when the model
+                            # ignores the allowed-neighbor constraint twice.
+                            result = game.fire_ai_bot(code, candidates[0])
+                            if "error" not in result:
+                                messages.append(result["message"])
+                                if result.get("over") or not result.get("continues"):
+                                    return {"message": " ".join(messages), "error": False}
+                                break
                         return {"message": " ".join(messages) or "Астра пока не смогла сделать выстрел.", "error": True}
             return {"message": " ".join(messages) or "Ответный ход Астры завершён.", "error": False}
 
