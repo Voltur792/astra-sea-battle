@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <script src="http://astra-plugin.localhost/bridge/astra-bridge.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Морской бой</title>
+  <style>
+    :root {
+      color-scheme: normal;
+      --glass: color-mix(in srgb, var(--color-surface, #808080) 18%, transparent);
+      --glass-soft: color-mix(in srgb, var(--color-surface, #808080) 13%, transparent);
+      --glass-hover: color-mix(in srgb, var(--color-surface, #808080) 28%, transparent);
+      --stroke: var(--color-border, rgba(255,255,255,.09));
+      --stroke-strong: var(--edge-control, rgba(255,255,255,.16));
+      --focus: var(--edge-focus, var(--color-accent, #8b5cf6));
+      --text: var(--color-text, #f7f6ff);
+      --text-soft: color-mix(in srgb, var(--color-text, #f7f6ff) 85%, transparent);
+      --muted: var(--color-text-muted, #89869b);
+      --accent: var(--color-accent, #8b5cf6);
+      --action: #6542d5;
+      --action-hover: #7656e9;
+      --hit: #ff7185;
+      --sunk: #f4bd62;
+    }
+    * { box-sizing: border-box; }
+    html { scrollbar-color: color-mix(in srgb, var(--muted) 55%, transparent) transparent; scrollbar-width: thin; }
+    html, body { min-height: 100%; margin: 0; background: transparent; }
+    body { color-scheme: light dark; color: var(--text); font: 13px/1.45 var(--font-sans, 'Segoe UI', system-ui, sans-serif); }
+    button, select { color: inherit; font: inherit; }
+    .select { color-scheme: dark; }
+    .select option { background: #25264f; color: #f4f3ff; }
+    button { cursor: pointer; }
+    button:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    .shell { max-width: 1090px; margin: 0 auto; padding: 24px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+    .heading { min-width: 0; }
+    h1 { margin: 0; font-size: 20px; letter-spacing: -.025em; line-height: 1.2; }
+    .subhead { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .mode-picker { display: flex; gap: 10px; margin: 9px 0 0; padding: 0; border: 0; }
+    .mode-choice { display: inline-flex; align-items: center; gap: 5px; color: var(--text-soft); font-size: 11px; cursor: pointer; }
+    .mode-choice input { margin: 0; accent-color: var(--action); }
+    .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .btn { min-height: 34px; border: 1px solid var(--stroke); border-radius: 999px; padding: 0 13px; background: var(--glass-hover); color: var(--text-soft); font-weight: 600; transition: transform .18s ease, background .18s ease, border-color .18s ease; }
+    .btn:hover:not(:disabled) { transform: translateY(-1px); background: color-mix(in srgb, var(--color-surface, #808080) 34%, transparent); border-color: var(--stroke-strong); }
+    .btn.primary { background: var(--action); color: #fff; border-color: rgba(190,170,255,.45); box-shadow: 0 4px 12px rgba(92,55,190,.24); }
+    .btn.primary:hover:not(:disabled) { background: var(--action-hover); border-color: rgba(215,200,255,.7); }
+    .btn:disabled { cursor: not-allowed; opacity: .5; }
+    .select { min-height: 34px; max-width: min(260px, 55vw); border: 1px solid var(--stroke); border-radius: 999px; padding: 0 30px 0 12px; background: var(--glass); }
+    .card { position: relative; border: 1px solid var(--stroke); border-radius: 17px; background: linear-gradient(145deg, rgba(255,255,255,.04), transparent 42%), var(--glass); box-shadow: inset 0 1px rgba(255,255,255,.04); }
+    .card::before { content: ""; position: absolute; top: -1px; left: 8%; width: 45%; height: 1px; opacity: .65; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+    .statusbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 14px; margin-bottom: 12px; }
+    .status-copy { min-width: 0; }
+    .status-title { font-weight: 700; }
+    .status-note { color: var(--muted); font-size: 11px; }
+    .stats { display: flex; gap: 12px; color: var(--muted); white-space: nowrap; font-size: 11px; }
+    .stats strong { color: var(--text); font-variant-numeric: tabular-nums; }
+    .boards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+    .board-card { min-width: 0; padding: 13px; }
+    .board-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 9px; }
+    .board-head h2 { margin: 0; font-size: 13px; }
+    .board-head span { color: var(--muted); font-size: 10px; }
+    .map-wrap { width: min(100%, 360px); margin: 0 auto; }
+    .map { display: grid; grid-template-columns: 20px repeat(10, minmax(0, 1fr)); gap: 3px; }
+    .coord { display: grid; place-items: center; color: var(--muted); font: 10px/1 var(--font-sans, 'Segoe UI', system-ui, sans-serif); }
+    .cell { display: grid; place-items: center; aspect-ratio: 1; min-width: 0; border: 1px solid var(--stroke); border-radius: 5px; padding: 0; background: color-mix(in srgb, var(--color-surface, #808080) 17%, transparent); color: var(--text-soft); font-size: clamp(13px, 1.45vw, 17px); line-height: 1; transition: transform .12s ease, border-color .12s ease, background .12s ease; }
+    .cell.available:hover { transform: translateY(-1px); border-color: var(--accent); background: var(--glass-hover); }
+    .cell.miss { color: var(--muted); background: color-mix(in srgb, var(--muted) 10%, transparent); }
+    .cell.hit { color: var(--hit); border-color: color-mix(in srgb, var(--hit) 50%, transparent); background: color-mix(in srgb, var(--hit) 13%, transparent); font-weight: 800; }
+    .cell.sunk { color: var(--sunk); border-color: color-mix(in srgb, var(--sunk) 60%, transparent); background: color-mix(in srgb, var(--sunk) 16%, transparent); font-weight: 800; }
+    .cell.ship { color: var(--text); background: color-mix(in srgb, var(--text) 17%, var(--glass)); border-color: color-mix(in srgb, var(--text) 24%, var(--stroke)); }
+    .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 9px 16px; margin-top: 10px; color: var(--muted); font-size: 10px; }
+    .legend b { color: var(--text); margin-right: 3px; }
+    .message { min-height: 18px; margin: 8px 2px 0; color: var(--text-soft); font-size: 11px; }
+    .message.error { color: var(--hit); }
+    .message-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .retry-ai { min-height: 30px; flex: 0 0 auto; }
+    .empty { padding: 38px 18px; text-align: center; color: var(--muted); }
+    .empty strong { display: block; margin-bottom: 5px; color: var(--text); font-size: 15px; }
+    .hidden { display: none !important; }
+    @media (max-width: 760px) {
+      .shell { padding: 18px; }
+      .topbar { align-items: flex-start; }
+      .boards { grid-template-columns: 1fr; }
+      .map-wrap { width: min(100%, 360px); }
+      .statusbar { align-items: flex-start; flex-direction: column; }
+      .stats { flex-wrap: wrap; }
+    }
+    @media (max-width: 430px) {
+      .topbar { flex-direction: column; }
+      .actions { width: 100%; }
+      .select { flex: 1; max-width: none; }
+      .map { gap: 2px; grid-template-columns: 17px repeat(10, minmax(0, 1fr)); }
+      .board-card { padding: 10px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
+    @media (forced-colors: active) { .cell { border: 1px solid ButtonText; } .cell:focus-visible { outline: 2px solid Highlight; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="heading">
+        <h1>Морской бой</h1>
+        <div class="subhead">Ходы с карты идут прямо в плагин; ИИ-режим просит модель Astra ответить JSON</div>
+        <fieldset class="mode-picker" aria-label="Режим новой партии">
+          <legend class="hidden">Режим новой партии</legend>
+          <label class="mode-choice"><input type="radio" name="gameMode" value="plugin" checked> Быстрый плагин · без токенов</label>
+          <label class="mode-choice"><input type="radio" name="gameMode" value="ai"> Против ИИ Astra · JSON</label>
+        </fieldset>
+      </div>
+      <div class="actions">
+        <label class="hidden" for="gameSelect">Выбрать партию</label>
+        <select class="select" id="gameSelect" aria-label="Выбрать партию"></select>
+        <button class="btn primary" id="newGame">Новая партия</button>
+        <button class="btn" id="refresh" title="Обновить карты">Обновить</button>
+      </div>
+    </header>
+
+    <section class="empty card hidden" id="empty" aria-live="polite">
+      <strong>Пока нет сохранённых партий</strong>
+      Начните партию — карты и история ходов появятся здесь.
+    </section>
+
+    <div id="gameView" class="hidden">
+      <section class="statusbar card" aria-live="polite">
+        <div class="status-copy">
+          <div class="status-title" id="turnTitle">Загрузка партии…</div>
+          <div class="status-note" id="turnNote">Карты загружаются</div>
+        </div>
+        <div class="stats" id="stats"></div>
+      </section>
+
+      <section class="boards" aria-label="Игровые карты">
+        <article class="board-card card">
+          <div class="board-head"><h2>Поле Астры</h2><span>выберите клетку для выстрела</span></div>
+          <div class="map-wrap"><div class="map" id="targetMap" role="group" aria-label="Поле Астры"></div></div>
+          <div class="legend" aria-label="Обозначения карты">
+            <span><b>□</b> неизвестно</span><span><b>·</b> мимо</span><span><b>×</b> попадание</span><span><b>◆</b> потоплено</span>
+          </div>
+        </article>
+        <article class="board-card card">
+          <div class="board-head"><h2>Твоё поле</h2><span>ответные выстрелы Астры</span></div>
+          <div class="map-wrap"><div class="map" id="ownMap" role="group" aria-label="Твоё поле"></div></div>
+          <div class="legend" aria-label="Обозначения карты">
+            <span><b>■</b> корабль</span><span><b>·</b> промах</span><span><b>×</b> попадание</span><span><b>◆</b> потоплено</span>
+          </div>
+        </article>
+      </section>
+      <div class="message-row"><button class="btn retry-ai hidden" id="retryAI">Повторить ход Астры</button></div>
+    </div>
+    <p class="message" id="message" role="status" aria-live="polite"></p>
+  </main>
+
+  <script>
+    const call = (method, params = {}) => {
+      const api = window.astra || window.__astraBridge || null;
+      const fn = api && (api.callBackend || api.call);
+      return fn ? fn.call(api, method, params) : Promise.reject(new Error('Нет соединения с Astra'));
+    };
+    const el = Object.fromEntries(['gameSelect','newGame','refresh','empty','gameView','turnTitle','turnNote','stats','targetMap','ownMap','message','retryAI'].map(id => [id, document.getElementById(id)]));
+    const letters = 'АБВГДЕЖЗИК';
+    const symbols = { unknown: '□', miss: '·', hit: '×', sunk: '◆', ship: '■' };
+    let state = null;
+    let busy = false;
+    let loadVersion = 0;
+    let selectedCode = '';
+    let lastActionKey = '';
+
+    function coordinate(row, col) { return `${letters[col]}${row + 1}`; }
+    function renderMap(root, cells, target) {
+      const actionRunning = state.ui_action?.status === 'running';
+      root.replaceChildren();
+      root.append(makeLabel(''));
+      for (const letter of letters) root.append(makeLabel(letter));
+      for (let row = 0; row < 10; row++) {
+        root.append(makeLabel(String(row + 1)));
+        for (let col = 0; col < 10; col++) {
+          const value = cells[row][col];
+          const code = coordinate(row, col);
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = `cell ${value}${target && value === 'unknown' && !state.selected.over && !busy && !actionRunning ? ' available' : ''}`;
+          button.textContent = symbols[value];
+          button.setAttribute('aria-label', `${code}: ${stateName(value)}${target && value === 'unknown' ? ', выстрелить' : ''}`);
+          button.title = `${code} · ${stateName(value)}`;
+          button.disabled = !target || value !== 'unknown' || state.selected.over || state.selected.bot_pending || busy || actionRunning;
+          if (!button.disabled) button.addEventListener('click', () => fire(code));
+          root.append(button);
+        }
+      }
+    }
+    function makeLabel(value) {
+      const node = document.createElement('span');
+      node.className = 'coord';
+      node.textContent = value;
+      node.setAttribute('aria-hidden', 'true');
+      return node;
+    }
+    function stateName(value) {
+      return ({unknown:'неизвестно', miss:'мимо', hit:'попадание', sunk:'потоплено', ship:'корабль'})[value] || value;
+    }
+    function render(next) {
+      if (!next) return;
+      state = next;
+      const games = next.games || [];
+      const chosen = next.selected;
+      selectedCode = chosen ? chosen.code : '';
+      el.empty.classList.toggle('hidden', !!chosen);
+      el.gameView.classList.toggle('hidden', !chosen);
+      el.gameSelect.replaceChildren();
+      for (const item of games) {
+        const option = document.createElement('option');
+        option.value = item.code;
+        option.textContent = `${item.code} · ${item.mode === 'ai' ? 'ИИ Astra' : 'плагин'} · ${item.over ? `завершена: ${item.winner}` : 'идёт'}`;
+        option.selected = item.code === selectedCode;
+        el.gameSelect.append(option);
+      }
+      const starting = next.ui_action?.kind === 'start' && next.ui_action?.status === 'running';
+      el.gameSelect.disabled = games.length === 0 || busy || starting;
+      el.newGame.disabled = busy || starting;
+      el.retryAI.classList.add('hidden');
+      for (const radio of document.querySelectorAll('input[name="gameMode"]')) radio.disabled = busy || starting;
+      const action = next.ui_action;
+      if (action) {
+        const actionKey = `${action.id}:${action.status}:${action.message}`;
+        if (actionKey !== lastActionKey) {
+          el.message.textContent = action.message || '';
+          el.message.classList.toggle('error', !!action.error);
+          lastActionKey = actionKey;
+        }
+      }
+      if (!chosen) return;
+      el.turnTitle.textContent = chosen.over ? `Партия ${chosen.code} завершена · победитель: ${chosen.winner}` : `Партия ${chosen.code} · ${chosen.bot_pending ? (chosen.bot_busy ? 'Астра выбирает выстрел…' : 'ответный ход ждёт повтора') : busy ? 'обработка…' : 'твой ход'}`;
+      const placementNote = chosen.bot_placement === 'model' ? 'Расстановку флота выбрала Астра' : 'Быстрый старт: случайная расстановка';
+      const opponentNote = chosen.mode === 'ai' ? 'ИИ Astra · ходы выбирает модель, JSON-обмен расходует токены' : 'Плагин · ходы по алгоритму, без вызова модели';
+      el.turnNote.textContent = chosen.over ? `Итоговые карты раскрыты · ${opponentNote} · ${placementNote}` : `Попадание даёт ещё один выстрел; после промаха ходит Астра · ${opponentNote} · ${placementNote}`;
+      el.stats.innerHTML = `<span>Корабли Астры: <strong>${chosen.bot_sunk}/10</strong></span><span>Твои корабли: <strong>${chosen.player_sunk}/10</strong></span><span>Выстрелы: <strong>${chosen.player_shots + chosen.bot_shots}</strong></span>`;
+      renderMap(el.targetMap, chosen.target_map, true);
+      renderMap(el.ownMap, chosen.own_map, false);
+      el.retryAI.classList.toggle('hidden', !chosen.bot_pending || busy || chosen.bot_busy);
+    }
+    async function load(code = selectedCode) {
+      const version = ++loadVersion;
+      const requestedCode = code;
+      try {
+        const snapshot = await call('sea_battle_ui_state', { game_code: code });
+        if (version !== loadVersion || (requestedCode && requestedCode !== selectedCode)) return;
+        render(snapshot);
+      } catch (error) {
+        if (version === loadVersion) showError(error.message || 'Не удалось загрузить партию.');
+      }
+    }
+    function showError(text) { el.message.textContent = text; el.message.classList.add('error'); }
+    async function fire(cell) {
+      if (busy || !selectedCode || !state?.selected || state.selected.over) return;
+      busy = true;
+      loadVersion++;
+      const oldMessage = el.message.textContent;
+      el.message.textContent = `Выстрел ${cell}…`;
+      render(state);
+      try {
+        const result = await call('sea_battle_ui_fire', { game_code: selectedCode, coordinate: cell });
+        render(result.state);
+        el.message.textContent = result.message || `Выстрел ${cell} выполнен.`;
+        el.message.classList.toggle('error', !!result.error);
+      } catch (error) {
+        el.message.textContent = error.message || oldMessage || 'Не удалось сделать выстрел. Обновите карту и повторите.';
+        el.message.classList.add('error');
+      } finally { busy = false; render(state); }
+    }
+    el.gameSelect.addEventListener('change', () => { selectedCode = el.gameSelect.value; el.message.textContent = ''; load(selectedCode); });
+    el.refresh.addEventListener('click', () => load());
+    el.newGame.addEventListener('click', async () => {
+      if (busy) return;
+      busy = true;
+      loadVersion++;
+      el.newGame.disabled = true;
+      const mode = document.querySelector('input[name="gameMode"]:checked').value;
+      el.message.textContent = mode === 'ai' ? 'Астра выбирает флот…' : 'Создаём партию…';
+      try {
+        const result = await call('sea_battle_ui_start', { mode });
+        render(result.state);
+        el.message.textContent = result.error || result.message;
+        el.message.classList.toggle('error', !!result.error);
+      } catch (error) { showError(error.message || 'Не удалось начать партию.'); }
+      finally { busy = false; render(state); }
+    });
+    el.retryAI.addEventListener('click', async () => {
+      if (busy || !selectedCode) return;
+      busy = true;
+      loadVersion++;
+      el.message.textContent = 'Астра выбирает выстрел…';
+      try {
+        const result = await call('sea_battle_ui_retry_ai', { game_code: selectedCode });
+        render(result.state);
+        el.message.textContent = result.message;
+        el.message.classList.toggle('error', !!result.error);
+      } catch (error) { showError(error.message || 'Не удалось продолжить ход Астры.'); }
+      finally { busy = false; render(state); }
+    });
+    load('');
+    window.setInterval(() => {
+      const action = state?.ui_action;
+      const waitingForNewGame = action?.kind === 'start' && action?.status === 'running';
+      if (!busy && !document.hidden && (selectedCode || action?.status === 'running')) load(waitingForNewGame ? '' : selectedCode);
+    }, 5000);
+  </script>
+</body>
+</html>

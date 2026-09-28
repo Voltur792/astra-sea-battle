@@ -1,0 +1,28 @@
+[plugin]
+id = "sea-battle"
+name = "Sea Battle"
+version = "0.3.0"
+description = "Play Battleship in Astra with an interactive map, quick local mode, or an optional AI opponent."
+author = "Voltur"
+license = "MIT"
+call_timeout_secs = 900
+
+[entry]
+command = "python"
+args = ["-m", "src.plugin"]
+cwd = "."
+runtimes = ["python"]
+
+[capabilities]
+tools = true
+ui_contributions = true
+
+[permissions]
+send_chat_message = { reason = "Uses Astra's model for the optional AI opponent; sends compact JSON game state and moves." }
+
+[config]
+schema = "{ \"type\": \"object\", \"properties\": {} }"
+
+[platform]
+os = ["linux", "windows"]
+arch = ["x86_64"]
