@@ -3,14 +3,21 @@
 import asyncio
 import json
 import logging
+import random
+import secrets
 
 from astra_plugin_sdk import Plugin, tool, ui_call, ui_page, UiContribution
 
-from . import game
+from . import game, online_store, preferences, notifications, clipboard
+from .matchmaking import BackgroundSearch
 from .tab_icon import TAB_ICON_SVG
 
 logger = logging.getLogger(__name__)
 _AI_TIMEOUT_SECONDS = 240
+
+
+class ModelResponseError(RuntimeError):
+    """Provider answered, but the answer isn't a usable game decision."""
 
 
 @ui_page(
@@ -26,6 +33,57 @@ class SeaBattle(Plugin):
         self._ui_action_id = 0
         self._ui_action = None
         self._ui_task = None
+        self._alerts = set()
+        self._model_lock = asyncio.Lock()
+        self._search = BackgroundSearch(self._match_found)
+
+    async def _match_found(self, session):
+        current = online_store.load()
+        if current["session"] is not None:
+            raise ValueError("Уже сохранена другая сетевая партия.")
+        online_store.save(current["revision"], session["config"], session)
+        task = asyncio.create_task(notifications.announce(self.host, preferences.load(), self._model_lock))
+        self._alerts.add(task); task.add_done_callback(self._alerts.discard)
+
+    async def on_shutdown(self):
+        await self._search.stop()
+        for task in tuple(self._alerts): task.cancel()
+        if self._alerts: await asyncio.gather(*tuple(self._alerts), return_exceptions=True)
+
+    @ui_call("sea_battle_preferences_load")
+    async def preferences_load(self, **params):
+        try: return self._ui_response(preferences.load())
+        except (OSError, ValueError): return self._ui_response({"error": "Не удалось прочитать настройки Морского боя."})
+
+    @ui_call("sea_battle_preferences_save")
+    async def preferences_save(self, **params):
+        try: return self._ui_response(preferences.update(params.get("patch", {})))
+        except (OSError, ValueError) as exc: return self._ui_response({"error": str(exc)})
+
+    @ui_call("sea_battle_search_state")
+    async def search_state(self, **params):
+        return self._ui_response(self._search.snapshot())
+
+    @ui_call("sea_battle_search_start")
+    async def search_start(self, **params):
+        try:
+            if online_store.load()["session"] is not None:
+                raise ValueError("Сначала покинь сохранённую сетевую комнату.")
+            return self._ui_response(await self._search.start(params.get("config", {}), preferences.load()["nickname"]))
+        except (OSError, ValueError) as exc: return self._ui_response({"error": str(exc)})
+
+    @ui_call("sea_battle_search_cancel")
+    async def search_cancel(self, **params):
+        await self._search.stop()
+        return self._ui_response(self._search.snapshot())
+
+    @ui_call("sea_battle_copy_invite")
+    async def copy_invite(self, **params):
+        try:
+            await clipboard.copy_invite(params.get("text"))
+            return self._ui_response({"copied": True})
+        except (OSError, ValueError) as exc:
+            return self._ui_response({"error": str(exc)})
 
     @tool("Начать новую партию Морского боя. Перед вызовом сам придумай расстановку флота Астры: 10 прямых горизонтальных или вертикальных отрезков без соприкосновения, длины строго 4,3,3,2,2,2,1,1,1,1. Передай bot_fleet строкой с координатами концов отрезков через дефис, корабли раздели точкой с запятой (например: А1-Г1;Е1-З1;К1-К3;А3-А4;В3-Г3;Е4-Ж4;Б6;Г6;Е7;З8). Без bot_fleet партию не начинай. Если расстановка неверная, исправь её и вызови инструмент повторно. Не раскрывай координаты флота Астры игроку. Покажи результат инструмента целиком, включая код партии и поле.")
     async def sea_battle_start(self, bot_fleet: str = "") -> str:
@@ -77,6 +135,23 @@ class SeaBattle(Plugin):
     @ui_call("sea_battle_ui_state")
     async def ui_state(self, **params):
         return self._ui_response(self._ui_snapshot(params.get("game_code", "")))
+
+    @ui_call("sea_battle_online_load")
+    async def online_load(self, **params):
+        try:
+            return self._ui_response(online_store.load())
+        except (OSError, ValueError, TypeError) as exc:
+            return self._ui_response({"error": str(exc)})
+
+    @ui_call("sea_battle_online_save")
+    async def online_save(self, **params):
+        try:
+            if self._search.active:
+                raise ValueError("Сначала отмени активный поиск соперника.")
+            return self._ui_response(online_store.save(
+                params.get("revision"), params.get("config"), params.get("session")))
+        except (OSError, ValueError, TypeError) as exc:
+            return self._ui_response({"error": str(exc)})
 
     @staticmethod
     def _ui_response(value):
@@ -138,23 +213,29 @@ class SeaBattle(Plugin):
                 error=error,
             )
 
-    async def _start_ai_from_ui(self):
-        bot_fleet = await self._choose_fleet()
-        result = game.start(bot_fleet, mode="ai")
+    async def _start_ai_from_ui(self, player_fleet=None):
+        choice = await self._choose_fleet()
+        result = game.start(choice["fleet"], mode="ai", player_fleet=player_fleet, bot_placement=choice["source"])
         if "Код партии: " not in result:
             raise RuntimeError(result)
         code = result.split("Код партии: ", 1)[1].split(".", 1)[0]
-        return {"message": "Астра выбрала расстановку. Партия началась.", "game_code": code}
+        return {"message": choice["message"] + " Партия началась.", "game_code": code}
 
     @ui_call("sea_battle_ui_start")
     async def ui_start(self, **params):
         mode = params.get("mode", "plugin")
+        player_fleet = params.get("player_fleet")
+        if player_fleet is not None:
+            try:
+                game.validate_player_fleet(player_fleet)
+            except ValueError as exc:
+                return self._ui_response({"error": str(exc), "message": str(exc), "state": self._ui_snapshot()})
         if mode == "ai":
             return self._ui_response(
-                self._queue_ui_action("start", "", "Астра выбирает флот…", self._start_ai_from_ui)
+                self._queue_ui_action("start", "", "Астра выбирает флот…", lambda: self._start_ai_from_ui(player_fleet))
             )
         else:
-            result = game.start(mode="plugin")
+            result = game.start(mode="plugin", player_fleet=player_fleet)
             message = "Партия началась. Флот расставлен автоматически без вызова модели."
         if "Код партии: " not in result:
             return self._ui_response({"error": result, "message": result, "state": self._ui_snapshot()})
@@ -196,6 +277,10 @@ class SeaBattle(Plugin):
         )
 
     async def _ask_json(self, payload: dict) -> dict:
+        async with self._model_lock:
+            return await self._ask_json_locked(payload)
+
+    async def _ask_json_locked(self, payload: dict) -> dict:
         """Ask Astra's configured model for one compact JSON game decision."""
         if self.host is None:
             raise RuntimeError("Нет соединения с моделью Astra.")
@@ -263,12 +348,12 @@ class SeaBattle(Plugin):
             if value is None and candidates:
                 value = candidates[-1]
             if value is None:
-                raise RuntimeError("Astra не вернула JSON с ходом или расстановкой.")
+                raise ModelResponseError("Astra не вернула JSON с ходом или расстановкой.")
         if not isinstance(value, dict):
-            raise RuntimeError("Ответ Astra должен быть JSON-объектом.")
+            raise ModelResponseError("Ответ Astra должен быть JSON-объектом.")
         return value
 
-    async def _choose_fleet(self) -> str:
+    async def _choose_fleet(self) -> dict:
         rules = (
             "Расставь флот для игры в морской бой на поле 10x10. Нужны 10 прямых кораблей: "
             "длины 4, 3, 3, 2, 2, 2, 1, 1, 1, 1. Корабли не должны пересекаться "
@@ -280,7 +365,11 @@ class SeaBattle(Plugin):
         )
         correction = ""
         for attempt in range(2):
-            answer = await self._ask_json(rules + correction)
+            try:
+                answer = await self._ask_json(rules + correction)
+            except ModelResponseError as exc:
+                answer = {}
+                logger.info("Astra fleet response needs correction: %s", exc)
             fleet = answer.get("fleet")
             if not isinstance(fleet, list):
                 # Some chat models echo the old request wrapper instead of
@@ -291,32 +380,37 @@ class SeaBattle(Plugin):
                     if isinstance(wrapper, dict) and isinstance(wrapper.get("fleet"), list):
                         fleet = wrapper["fleet"]
                         break
+            if isinstance(fleet, str):
+                fleet = [ship.strip() for ship in fleet.split(";") if ship.strip()]
             if isinstance(fleet, list) and all(isinstance(ship, str) for ship in fleet):
                 encoded = ";".join(fleet)
                 try:
                     game.parse_bot_fleet(encoded)
-                    return encoded
+                    return {"fleet": encoded, "source": "model", "message": "Астра выбрала допустимую расстановку."}
                 except ValueError as exc:
                     reason = str(exc)
-                    if "соприкасаться" in reason:
-                        try:
-                            repaired = game.repair_bot_fleet(encoded)
-                            logger.info("Adjusted Astra fleet to remove touching ships")
-                            return repaired
-                        except ValueError as repair_exc:
-                            reason = str(repair_exc)
+                    try:
+                        repaired = game.repair_bot_fleet(encoded)
+                        logger.info("Adjusted Astra fleet to satisfy placement rules")
+                        return {"fleet": repaired, "source": "model_repaired", "message": "Астра предложила флот; плагин исправил конфликтующие позиции."}
+                    except ValueError as repair_exc:
+                        reason = str(repair_exc)
             else:
                 reason = "JSON должен содержать ключ fleet со списком из 10 координатных отрезков."
             if attempt == 0:
                 correction = f"\nПредыдущий ответ не принят: {reason} Исправь его и верни новый JSON с ключом fleet."
         logger.warning("Astra returned an invalid fleet after retries: %s", reason)
-        raise RuntimeError(f"Модель Astra не смогла предложить допустимую расстановку: {reason}")
+        ships = game.make_fleet(random.Random(secrets.randbits(64)))
+        encoded = ";".join(game._label(game._unkey(ship[0])) if len(ship) == 1 else
+                           game._label(game._unkey(ship[0])) + "-" + game._label(game._unkey(ship[-1])) for ship in ships)
+        return {"fleet": encoded, "source": "fallback", "message": "ИИ дважды предложил неверный флот. Плагин подготовил корректную случайную расстановку; ходы по-прежнему выбирает Astra."}
 
     async def _run_ai_turn(self, code: str) -> dict:
         """Ask Astra for shots until it misses, validating every coordinate."""
         lock = self._ai_locks.setdefault(code.strip().upper(), asyncio.Lock())
         async with lock:
             messages = []
+            fallback_used = False
             while True:
                 observation = game.ai_observation(code)
                 if observation is None:
@@ -332,7 +426,10 @@ class SeaBattle(Plugin):
                     + json.dumps(observation["target_candidates"], ensure_ascii=False, separators=(",", ":"))
                 )
                 for attempt in range(2):
-                    answer = await self._ask_json(prompt)
+                    try:
+                        answer = await self._ask_json(prompt)
+                    except ModelResponseError:
+                        answer = {}
                     coordinate = answer.get("coordinate")
                     if not isinstance(coordinate, str):
                         coordinate = answer.get("shot")
@@ -340,20 +437,20 @@ class SeaBattle(Plugin):
                     if "error" not in result:
                         messages.append(result["message"])
                         if result.get("over") or not result.get("continues"):
-                            return {"message": " ".join(messages), "error": False}
+                            return {"message": " ".join(messages), "error": False, "fallback": fallback_used}
                         break
                     if attempt == 0:
                         prompt += f"\nЭтот ход недопустим: {result['error']} Верни другую клетку в JSON."
                     else:
-                        candidates = observation.get("target_candidates") or []
+                        candidates = observation.get("target_candidates") or observation.get("available") or []
                         if candidates:
-                            # Keep the target logic reliable even when the model
-                            # ignores the allowed-neighbor constraint twice.
-                            result = game.fire_ai_bot(code, candidates[0])
+                            coordinate = candidates[0] if observation.get("target_candidates") else random.choice(candidates)
+                            result = game.fire_ai_bot(code, coordinate)
                             if "error" not in result:
-                                messages.append(result["message"])
+                                fallback_used = True
+                                messages.append("Модель дважды предложила неверный ход; допустимую клетку выбрал плагин. " + result["message"])
                                 if result.get("over") or not result.get("continues"):
-                                    return {"message": " ".join(messages), "error": False}
+                                    return {"message": " ".join(messages), "error": False, "fallback": True}
                                 break
                         return {"message": " ".join(messages) or "Астра пока не смогла сделать выстрел.", "error": True}
             return {"message": " ".join(messages) or "Ответный ход Астры завершён.", "error": False}

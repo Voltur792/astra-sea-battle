@@ -319,6 +319,7 @@ def ui_state(code: str = "") -> dict:
                 "over": bool(selected["over"]),
                 "winner": selected["winner"],
                 "bot_placement": selected.get("bot_placement", "random"),
+                "player_placement": selected.get("player_placement", "random"),
                 "mode": selected.get("mode", "plugin"),
                 "bot_pending": bool(selected.get("bot_pending", False)),
                 "player_shots": len(selected["player_shots"]),
@@ -375,12 +376,33 @@ def _bot_shot(game: dict) -> tuple[str, str]:
     return _label(cell), result
 
 
-def start(bot_fleet: str = "", mode: str = "plugin") -> str:
+def validate_player_fleet(fleet) -> list[list[str]]:
+    """Validate UI cell lists with the same complete fleet rules."""
+    if not isinstance(fleet, list) or len(fleet) != 10:
+        raise ValueError("Расставь все 10 своих кораблей.")
+    encoded, expected = [], []
+    for ship in fleet:
+        if not isinstance(ship, list) or not 1 <= len(ship) <= 4 or any(type(c) is not int or not 0 <= c < 100 for c in ship):
+            raise ValueError("Корабли должны находиться в пределах поля.")
+        cells = sorted(ship)
+        if len(set(cells)) != len(cells):
+            raise ValueError("В корабле не должно быть повторяющихся клеток.")
+        first, last = divmod(cells[0], 10), divmod(cells[-1], 10)
+        encoded.append(_label(first) if len(cells) == 1 else f"{_label(first)}-{_label(last)}")
+        expected.append([_key(divmod(c, 10)) for c in cells])
+    parsed = parse_bot_fleet(";".join(encoded))
+    if parsed != expected:
+        raise ValueError("Корабли должны быть прямыми, без пропусков.")
+    return parsed
+
+
+def start(bot_fleet: str = "", mode: str = "plugin", player_fleet=None, bot_placement: str = "") -> str:
     mode = mode if mode in ("ai", "plugin") else "plugin"
     if mode == "ai" and not bot_fleet.strip():
         return "Для режима против ИИ нужна расстановка флота, выбранная моделью Astra."
     try:
         bot_ships = parse_bot_fleet(bot_fleet) if bot_fleet.strip() else None
+        player_ships = validate_player_fleet(player_fleet) if player_fleet is not None else None
     except ValueError as exc:
         return f"Не удалось начать партию: {exc} Проверь расстановку и попробуй ещё раз."
     with _LOCK:
@@ -390,9 +412,10 @@ def start(bot_fleet: str = "", mode: str = "plugin") -> str:
             code = secrets.token_hex(4).upper()
         rng = random.Random(secrets.randbits(64))
         game = {
-            "player_ships": make_fleet(rng),
+            "player_ships": player_ships or make_fleet(rng),
+            "player_placement": "manual" if player_ships else "random",
             "bot_ships": bot_ships or make_fleet(rng),
-            "bot_placement": "model" if bot_ships else "random",
+            "bot_placement": bot_placement if bot_placement in ("model", "model_repaired", "fallback") else "model" if bot_ships else "random",
             "mode": mode,
             "bot_pending": False,
             "player_shots": [],
@@ -476,6 +499,7 @@ def ai_observation(code: str) -> dict | None:
             "game_code": code,
             "shots": observations,
             "target_candidates": [_label(cell) for cell in target_candidates],
+            "available": [_label((row, col)) for row in range(SIZE) for col in range(SIZE) if _key((row, col)) not in set(shots)],
         }
 
 

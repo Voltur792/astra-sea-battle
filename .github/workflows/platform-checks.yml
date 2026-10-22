@@ -40,3 +40,5 @@ jobs:
       - run: python -m pip install uv==0.11.11
       - name: Install with uv, import native modules and run offline tests
         run: python scripts/verify_environment.py
+      - name: Network game protocol, placement and reconnect tests
+        run: node --test tests/test_online_rules.cjs tests/test_online_router.cjs tests/test_matchmaking.cjs

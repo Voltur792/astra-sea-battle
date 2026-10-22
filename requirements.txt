@@ -1,3 +1,4 @@
 astra-plugin-sdk>=0.6,<0.7
 grpcio>=1.60.0
 protobuf>=4.25.0
+websockets>=15,<17

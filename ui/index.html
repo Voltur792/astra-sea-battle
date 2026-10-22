@@ -5,6 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Морской бой</title>
+  <link rel="stylesheet" href="online.css">
   <style>
     :root {
       color-scheme: normal;
@@ -20,8 +21,8 @@
       --accent: var(--color-accent, #8b5cf6);
       --action: #6542d5;
       --action-hover: #7656e9;
-      --hit: #ff7185;
-      --sunk: #f4bd62;
+      --hit: color-mix(in srgb, #ed3453 65%, var(--text) 35%);
+      --sunk: color-mix(in srgb, #d19b3e 45%, var(--text) 55%);
     }
     * { box-sizing: border-box; }
     html { scrollbar-color: color-mix(in srgb, var(--muted) 55%, transparent) transparent; scrollbar-width: thin; }
@@ -38,7 +39,7 @@
     h1 { margin: 0; font-size: 20px; letter-spacing: -.025em; line-height: 1.2; }
     .subhead { margin-top: 4px; color: var(--muted); font-size: 12px; }
     .mode-picker { display: flex; gap: 10px; margin: 9px 0 0; padding: 0; border: 0; }
-    .mode-choice { display: inline-flex; align-items: center; gap: 5px; color: var(--text-soft); font-size: 11px; cursor: pointer; }
+    .mode-choice { display: inline-flex; align-items: center; gap: 5px; color: var(--text-soft); font-size: 12px; cursor: pointer; }
     .mode-choice input { margin: 0; accent-color: var(--action); }
     .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .btn { min-height: 34px; border: 1px solid var(--stroke); border-radius: 999px; padding: 0 13px; background: var(--glass-hover); color: var(--text-soft); font-weight: 600; transition: transform .18s ease, background .18s ease, border-color .18s ease; }
@@ -52,26 +53,26 @@
     .statusbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 14px; margin-bottom: 12px; }
     .status-copy { min-width: 0; }
     .status-title { font-weight: 700; }
-    .status-note { color: var(--muted); font-size: 11px; }
-    .stats { display: flex; gap: 12px; color: var(--muted); white-space: nowrap; font-size: 11px; }
+    .status-note { color: var(--muted); font-size: 12px; }
+    .stats { display: flex; gap: 12px; color: var(--muted); white-space: nowrap; font-size: 12px; }
     .stats strong { color: var(--text); font-variant-numeric: tabular-nums; }
     .boards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
     .board-card { min-width: 0; padding: 13px; }
     .board-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 9px; }
     .board-head h2 { margin: 0; font-size: 13px; }
-    .board-head span { color: var(--muted); font-size: 10px; }
+    .board-head span { color: var(--muted); font-size: 12px; }
     .map-wrap { width: min(100%, 360px); margin: 0 auto; }
     .map { display: grid; grid-template-columns: 20px repeat(10, minmax(0, 1fr)); gap: 3px; }
-    .coord { display: grid; place-items: center; color: var(--muted); font: 10px/1 var(--font-sans, 'Segoe UI', system-ui, sans-serif); }
+    .coord { display: grid; place-items: center; color: var(--muted); font: 12px/1 var(--font-sans, 'Segoe UI', system-ui, sans-serif); }
     .cell { display: grid; place-items: center; aspect-ratio: 1; min-width: 0; border: 1px solid var(--stroke); border-radius: 5px; padding: 0; background: color-mix(in srgb, var(--color-surface, #808080) 17%, transparent); color: var(--text-soft); font-size: clamp(13px, 1.45vw, 17px); line-height: 1; transition: transform .12s ease, border-color .12s ease, background .12s ease; }
     .cell.available:hover { transform: translateY(-1px); border-color: var(--accent); background: var(--glass-hover); }
     .cell.miss { color: var(--muted); background: color-mix(in srgb, var(--muted) 10%, transparent); }
     .cell.hit { color: var(--hit); border-color: color-mix(in srgb, var(--hit) 50%, transparent); background: color-mix(in srgb, var(--hit) 13%, transparent); font-weight: 800; }
     .cell.sunk { color: var(--sunk); border-color: color-mix(in srgb, var(--sunk) 60%, transparent); background: color-mix(in srgb, var(--sunk) 16%, transparent); font-weight: 800; }
     .cell.ship { color: var(--text); background: color-mix(in srgb, var(--text) 17%, var(--glass)); border-color: color-mix(in srgb, var(--text) 24%, var(--stroke)); }
-    .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 9px 16px; margin-top: 10px; color: var(--muted); font-size: 10px; }
+    .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 9px 16px; margin-top: 10px; color: var(--muted); font-size: 12px; }
     .legend b { color: var(--text); margin-right: 3px; }
-    .message { min-height: 18px; margin: 8px 2px 0; color: var(--text-soft); font-size: 11px; }
+    .message { min-height: 18px; margin: 8px 2px 0; color: var(--text-soft); font-size: 12px; }
     .message.error { color: var(--hit); }
     .message-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .retry-ai { min-height: 30px; flex: 0 0 auto; }
@@ -96,6 +97,7 @@
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
     @media (forced-colors: active) { .cell { border: 1px solid ButtonText; } .cell:focus-visible { outline: 2px solid Highlight; } }
   </style>
+  <link rel="stylesheet" href="timer-style.css">
 </head>
 <body>
   <main class="shell">
@@ -103,19 +105,85 @@
       <div class="heading">
         <h1>Морской бой</h1>
         <div class="subhead">Стреляйте по карте и следите за ходом игры</div>
-        <fieldset class="mode-picker" aria-label="Режим новой партии">
-          <legend class="hidden">Режим новой партии</legend>
-          <label class="mode-choice"><input type="radio" name="gameMode" value="plugin" checked> Быстрая игра · без расхода ИИ</label>
-          <label class="mode-choice"><input type="radio" name="gameMode" value="ai"> Против ИИ Astra</label>
-        </fieldset>
       </div>
-      <div class="actions">
+      <div class="actions" id="localActions">
         <label class="hidden" for="gameSelect">Выбрать партию</label>
         <select class="select" id="gameSelect" aria-label="Выбрать партию"></select>
         <button class="btn primary" id="newGame">Новая партия</button>
         <button class="btn" id="refresh" title="Обновить карты">Обновить</button>
       </div>
     </header>
+    <fieldset class="mode-picker" aria-label="Режим новой партии">
+      <legend class="hidden">Режим новой партии</legend>
+      <label class="mode-choice"><input type="radio" name="gameMode" value="plugin" checked> Быстрая игра · без расхода ИИ</label>
+      <label class="mode-choice"><input type="radio" name="gameMode" value="ai"> Против ИИ Astra</label>
+      <label class="mode-choice"><input type="radio" name="gameMode" value="online"> Другой игрок · сеть</label>
+    </fieldset>
+
+    <section id="localPlacement" class="card placement-card hidden" aria-label="Расстановка своих кораблей">
+      <div><h2 id="localPlacementTitle">Расставь свои корабли</h2><p class="placement-hint">Поле 10×10. Поставь 10 кораблей; они не должны соприкасаться даже углами. Нажми на корабль, чтобы убрать его.</p>
+        <div class="net-placement">
+          <label>Длина корабля <select id="localLength" class="select"><option value="4">4 клетки</option><option value="3">3 клетки</option><option value="2">2 клетки</option><option value="1">1 клетка</option></select></label>
+          <button type="button" class="btn" id="localRotate" aria-pressed="false">Горизонтально</button>
+          <button type="button" class="btn" id="localRandom">Расставить случайно</button><button type="button" class="btn" id="localClear">Очистить поле</button>
+        </div><p id="localRemaining" class="placement-hint"></p><p id="localPlacementMessage" class="message" role="status" aria-live="polite"></p>
+        <div class="actions"><button type="button" class="btn primary" id="localBegin" disabled>Начать партию</button><button type="button" class="btn" id="localCancel">Отмена</button></div>
+      </div><div class="map-wrap"><div class="map" id="localPlacementMap" role="group" aria-label="Твои корабли перед началом партии"></div></div>
+    </section>
+
+    <section id="onlineView" class="hidden" aria-label="Игра с другим игроком">
+      <p class="net-intro">Поиск работает в фоне. Для передачи ходов держите вкладку партии открытой: соединение идёт напрямую или через ретранслятор.</p>
+      <p id="netConnection" class="net-note" role="status" aria-live="polite">Маршрут выбирается автоматически: Metered → PeerJS → резервное прямое соединение.</p>
+      <details class="net-settings" id="netPlayerSettings"><summary>Ник и оповещения</summary>
+        <label for="netNickname">Твой ник <input class="net-input" id="netNickname" maxlength="32" autocomplete="nickname" placeholder="Игрок"></label>
+        <p>Ник передаётся сопернику; в общую очередь не публикуется. Это отображаемое имя, а не проверенный аккаунт.</p>
+        <label for="netAlert">Соперник найден <select id="netAlert" class="select"><option value="sound">Звуковой сигнал</option><option value="voice">Голос Astra · запрос к модели</option><option value="silent">Без звука</option></select></label>
+        <label class="net-check"><input type="checkbox" id="netNotifications" checked> Системное уведомление</label>
+        <p>Поиск продолжится на других вкладках, пока работают Astra и плагин. Голос использует выбранную модель и голос Astra; при ошибке прозвучит обычный сигнал.</p>
+        <p id="netPreferencesMessage" class="message" role="status"></p>
+      </details>
+      <section id="netSearchPanel" class="card net-search" aria-labelledby="netSearchTitle">
+        <div><h2 id="netSearchTitle">Найти соперника</h2><p>Случайная пара из игроков, которые сейчас ищут игру. Без регистрации и переписки.</p>
+          <div class="net-buttons"><button type="button" class="btn primary" id="netFind">Найти игру</button><button type="button" class="btn hidden" id="netCancelSearch">Отменить поиск</button></div>
+        </div><div class="net-search-count"><strong id="netOnlineCount" role="status" aria-live="polite">В поиске: —</strong><span id="netSearchState">Подключимся к очереди после нажатия «Найти игру».</span></div>
+      </section>
+      <div id="netLobby" class="net-lobby">
+        <div><h2>Создать комнату</h2><p>Отправь другу приглашение в любом мессенджере.</p><button type="button" class="btn primary" id="netCreate">Создать комнату</button></div>
+        <div><h2>Присоединиться</h2><label for="netJoinCode">Приглашение друга</label><textarea id="netJoinCode" class="net-input" rows="3" spellcheck="false" placeholder="SB2.…"></textarea><button type="button" class="btn" id="netJoin">Войти в комнату</button></div>
+      </div>
+      <div id="netSession" class="hidden">
+        <div class="net-room-tools">
+          <details id="netInviteGroup" open><summary>Приглашение для друга</summary><label for="netInvite">Передавай только сопернику</label><textarea id="netInvite" class="net-input" rows="2" readonly spellcheck="false"></textarea><button type="button" class="btn" id="netCopy">Скопировать приглашение</button></details>
+          <div class="net-buttons"><button type="button" class="btn" id="netReconnect">Переподключиться</button><button type="button" class="btn" id="netSurrender">Сдаться</button><button type="button" class="btn" id="netLeave">Покинуть комнату</button></div>
+        </div>
+        <div id="netLeaveConfirm" class="net-confirm hidden"><p>Покинуть комнату? Сохранение этой сетевой партии будет удалено. Если игра идёт, сначала сдайся при подключённом сопернике.</p><button type="button" class="btn" id="netLeaveYes">Покинуть и удалить сохранение</button> <button type="button" class="btn" id="netLeaveNo">Остаться</button></div>
+        <details id="netManual" class="net-settings">
+          <summary>Резерв: соединиться без сервиса комнат</summary>
+          <p>Если закончилась квота сообщений или сервис комнат недоступен, обменяйтесь резервными кодами через мессенджер. Создатель отправляет резервное приглашение; второй игрок принимает его и возвращает ответ; создатель принимает ответ. Вкладку между этими шагами не закрывайте.</p>
+          <p>Эти коды не расходуют сообщения сервиса комнат. Для сложных сетей по-прежнему нужен доступный TURN с оставшимся трафиком.</p>
+          <button type="button" class="btn" id="netManualOffer">Создать резервное приглашение</button>
+          <label for="netManualInput">Резервный код от друга</label><textarea id="netManualInput" class="net-input" rows="3" spellcheck="false" placeholder="SBM1.…"></textarea>
+          <button type="button" class="btn" id="netManualAccept">Принять резервный код</button>
+          <label for="netManualOutput">Код для отправки другу</label><textarea id="netManualOutput" class="net-input" rows="3" readonly spellcheck="false"></textarea>
+          <button type="button" class="btn" id="netManualCopy">Скопировать резервный код</button>
+        </details>
+        <div id="netSurrenderConfirm" class="net-confirm hidden"><p>Подтвердить сдачу? Соперник победит, ваши расстановки будут раскрыты для проверки партии.</p><button type="button" class="btn" id="netSurrenderYes">Подтвердить сдачу</button> <button type="button" class="btn" id="netSurrenderNo">Продолжить игру</button></div>
+        <section class="statusbar card"><div><div class="status-title" id="netPhase">Расстановка кораблей</div><div id="netOpponent" class="status-note">Соперник: Игрок</div><div class="status-note" id="netReadyStatus"></div></div><div id="netScore" class="stats"></div></section>
+        <div id="netPlacement" class="net-placement">
+          <label>Длина корабля <select id="netLength" class="select"><option value="4">4 клетки</option><option value="3">3 клетки</option><option value="2">2 клетки</option><option value="1">1 клетка</option></select></label>
+          <button type="button" class="btn" id="netRotate" aria-pressed="false">Горизонтально</button>
+          <button type="button" class="btn" id="netRandom">Расставить случайно</button><button type="button" class="btn" id="netClear">Очистить поле</button><button type="button" class="btn primary" id="netReady">Готов</button>
+          <p id="netRemaining"></p><p>Нажми на начало корабля на своём поле. Нажатие на уже поставленный корабль убирает его. Соприкосновение запрещено даже углами. После «Готов» расстановка фиксируется.</p>
+        </div>
+        <section class="boards" aria-label="Карты сетевой партии">
+          <article class="board-card card"><div class="board-head"><h2>Поле соперника</h2><span>выстрелы по неизвестным клеткам</span></div><div class="map-wrap"><div id="netTargetMap" class="map" role="group" aria-label="Поле соперника"></div></div></article>
+          <article class="board-card card"><div class="board-head"><h2>Твоё поле</h2><span id="netOwnHint">расставь корабли</span></div><div class="map-wrap"><div id="netOwnMap" class="map" role="group" aria-label="Твоё поле в сетевой игре"></div></div></article>
+        </section>
+        <p id="netVerification" class="net-note"></p>
+        <details class="net-history"><summary>История выстрелов</summary><ol id="netHistory"></ol></details>
+      </div>
+      <p id="netMessage" class="message" role="status" aria-live="polite"></p>
+    </section>
 
     <section class="empty card hidden" id="empty" aria-live="polite">
       <strong>Пока нет сохранённых партий</strong>
@@ -152,6 +220,7 @@
     <p class="message" id="message" role="status" aria-live="polite"></p>
   </main>
 
+  <script src="preferences-ui.js"></script>
   <script>
     const call = (method, params = {}) => {
       const api = window.astra || window.__astraBridge || null;
@@ -205,6 +274,7 @@
       state = next;
       const games = next.games || [];
       const chosen = next.selected;
+      if (!window.SeaPreferences.values.mode && chosen) void window.SeaPreferences.set({mode:chosen.mode}).catch(()=>{});
       selectedCode = chosen ? chosen.code : '';
       el.empty.classList.toggle('hidden', !!chosen);
       el.gameView.classList.toggle('hidden', !chosen);
@@ -232,7 +302,7 @@
       }
       if (!chosen) return;
       el.turnTitle.textContent = chosen.over ? `Партия ${chosen.code} завершена · победитель: ${chosen.winner}` : `Партия ${chosen.code} · ${chosen.bot_pending ? (chosen.bot_busy ? 'Астра выбирает выстрел…' : 'ответный ход ждёт повтора') : busy ? 'обработка…' : 'твой ход'}`;
-      const placementNote = chosen.bot_placement === 'model' ? 'Флот подготовила Астра' : 'Случайная расстановка';
+      const placementNote = ({model:'Флот подготовила Астра', model_repaired:'Расстановку Астры исправил плагин', fallback:'Резервный флот подготовил плагин', random:'Случайная расстановка'})[chosen.bot_placement] || 'Случайная расстановка';
       const opponentNote = chosen.mode === 'ai' ? 'Соперник — Astra' : 'Быстрый соперник';
       el.turnNote.textContent = chosen.over ? `Итоговые карты раскрыты · ${opponentNote} · ${placementNote}` : `Попадание — стреляй ещё; после промаха ходит Astra · ${opponentNote} · ${placementNote}`;
       el.stats.innerHTML = `<span>Корабли Астры: <strong>${chosen.bot_sunk}/10</strong></span><span>Твои корабли: <strong>${chosen.player_sunk}/10</strong></span><span>Выстрелы: <strong>${chosen.player_shots + chosen.bot_shots}</strong></span>`;
@@ -246,6 +316,7 @@
       try {
         const snapshot = await call('sea_battle_ui_state', { game_code: code });
         if (version !== loadVersion || (requestedCode && requestedCode !== selectedCode)) return;
+        await window.SeaPreferences.ready;
         render(snapshot);
       } catch (error) {
         if (version === loadVersion) showError(error.message || 'Не удалось загрузить партию.');
@@ -271,20 +342,26 @@
     }
     el.gameSelect.addEventListener('change', () => { selectedCode = el.gameSelect.value; el.message.textContent = ''; load(selectedCode); });
     el.refresh.addEventListener('click', () => load());
-    el.newGame.addEventListener('click', async () => {
+    async function beginLocalGame(mode, player_fleet) {
+      if (document.querySelector('input[name="gameMode"]:checked').value === 'online') return;
       if (busy) return;
       busy = true;
       loadVersion++;
       el.newGame.disabled = true;
-      const mode = document.querySelector('input[name="gameMode"]:checked').value;
       el.message.textContent = mode === 'ai' ? 'Астра выбирает флот…' : 'Создаём партию…';
       try {
-        const result = await call('sea_battle_ui_start', { mode });
+        const result = await call('sea_battle_ui_start', { mode, player_fleet });
         render(result.state);
         el.message.textContent = result.error || result.message;
         el.message.classList.toggle('error', !!result.error);
       } catch (error) { showError(error.message || 'Не удалось начать партию.'); }
       finally { busy = false; render(state); }
+    }
+    el.newGame.addEventListener('click', () => {
+      if (busy) return;
+      const mode = document.querySelector('input[name="gameMode"]:checked').value;
+      if (mode === 'online') return;
+      window.SeaLocalPlacement.open(mode, fleet => beginLocalGame(mode, fleet));
     });
     el.retryAI.addEventListener('click', async () => {
       if (busy || !selectedCode) return;
@@ -303,8 +380,16 @@
     window.setInterval(() => {
       const action = state?.ui_action;
       const waitingForNewGame = action?.kind === 'start' && action?.status === 'running';
-      if (!busy && !document.hidden && (selectedCode || action?.status === 'running')) load(waitingForNewGame ? '' : selectedCode);
+      if (!busy && !document.hidden && !document.body.classList.contains('online-mode') && (selectedCode || action?.status === 'running')) load(waitingForNewGame ? '' : selectedCode);
     }, 5000);
   </script>
+  <script src="online-config.js"></script>
+  <script src="online-rules.js"></script>
+  <script src="placement-ui.js"></script>
+  <script src="vendor/peerjs-1.5.5.min.js"></script>
+  <script src="online-transport.js"></script>
+  <script src="online-router.js"></script>
+  <script src="matchmaking.js"></script>
+  <script src="online-ui.js"></script>
 </body>
 </html>

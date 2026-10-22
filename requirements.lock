@@ -18,3 +18,5 @@ setuptools==84.0.0
     # via grpcio-tools
 typing-extensions==4.16.0
     # via grpcio
+websockets==16.1.1
+    # via -r requirements.txt

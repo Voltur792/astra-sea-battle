@@ -10,3 +10,7 @@ dist/
 .tmp-platform-tests/
 
 AGENTS.md
+.astra-venv.json
+.impeccable/
+DESIGN.md
+PRODUCT.md
