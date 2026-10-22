@@ -9,6 +9,7 @@ import secrets
 import tempfile
 import threading
 from pathlib import Path
+from .storage import data_root
 
 SIZE = 10
 FLEET = (4, 3, 3, 2, 2, 2, 1, 1, 1, 1)
@@ -19,10 +20,7 @@ MAX_SAVED_GAMES = 5
 
 
 def _state_path() -> Path:
-    root = os.environ.get("SEA_BATTLE_DATA_DIR")
-    if not root:
-        root = str(Path(os.environ.get("APPDATA") or Path.home() / ".local" / "share") / "sea-battle")
-    return Path(root) / "games.json"
+    return data_root("sea-battle", "SEA_BATTLE_DATA_DIR") / "games.json"
 
 
 def _load() -> dict:

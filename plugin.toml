@@ -1,7 +1,7 @@
 [plugin]
 id = "sea-battle"
 name = "Sea Battle"
-version = "0.3.4"
+version = "0.4.0"
 description = "Play Battleship in Astra with an interactive map, quick local mode, or an optional AI opponent."
 author = "Voltur"
 license = "MIT"
@@ -24,5 +24,5 @@ send_chat_message = { reason = "Allows Astra to let the selected AI model choose
 schema = "{ \"type\": \"object\", \"properties\": {} }"
 
 [platform]
-os = ["linux", "windows"]
-arch = ["x86_64"]
+os = ["windows", "linux", "macos"]
+arch = ["x86_64", "aarch64"]
